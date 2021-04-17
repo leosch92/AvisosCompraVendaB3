@@ -22,7 +22,7 @@ namespace AvisosCompraVendaB3
             string apiKey = configuration["apiKey"];
             string targetEmail = configuration["targetEmail"];
 
-            //CultureInfo.CurrentCulture = new CultureInfo("en-US", false);
+            CultureInfo.CurrentCulture = new CultureInfo("en-US", false);
 
             try
             {
