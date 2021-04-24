@@ -7,7 +7,7 @@ São necessários os seguintes itens para a utilização da aplicação:
 * Um servidor de email configurado, com credenciais de usuário e senha, para o envio dos e-mails de aviso
 
 **Instruções de instalação:**
-1. Faça o download da aplicação em formato .zip da última [release](https://github.com/leosch92/AvisosCompraVendaB3/releases)
+1. Faça o download da aplicação em formato .zip ("AvisosCompraVendaB3.zip") da última [release](https://github.com/leosch92/AvisosCompraVendaB3/releases)
 2. Faça a extração dos arquivos para um diretório de saída
 3. O arquivo de configurações "appsettings.json" deverá ser preenchido com os seguintes dados:
 * **apiKey** - Chave da API da HG Brasil
