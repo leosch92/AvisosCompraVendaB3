@@ -12,8 +12,10 @@
         public string Currency { get; set; }
         public MarketTime Market_time { get; set; }
         public int Market_cap { get; set; }
-        public double Price { get; set; }
+        public decimal Price { get; set; }
         public double Change_percent { get; set; }
         public string Updated_at { get; set; }
+        public bool Error { get; set; }
+        public string Message { get; set; }
     }
 }

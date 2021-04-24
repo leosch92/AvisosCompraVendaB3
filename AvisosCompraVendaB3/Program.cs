@@ -1,11 +1,12 @@
-﻿using Microsoft.Extensions.Configuration;
-using System;
+﻿using System;
 using System.Globalization;
-using System.IO;
 using System.Threading.Tasks;
-using RestSharp;
 using AvisosCompraVendaB3.Model;
-using System.Net.Mail;
+using Quartz.Impl;
+using Quartz;
+using AvisosCompraVendaB3.Job;
+using Microsoft.Extensions.Configuration;
+using System.IO;
 
 namespace AvisosCompraVendaB3
 {
@@ -13,57 +14,77 @@ namespace AvisosCompraVendaB3
     {
         static async Task Main(string[] args)
         {
+
+            CultureInfo.CurrentCulture = new CultureInfo("en-US", false);
+            var configuration = GetConfiguration();
+
+            AvisosContext context;
+            try
+            {
+                context = MakeContext(args);
+            }
+            catch (FormatException)
+            {
+                Console.WriteLine("Formato de preço incorreto. Favor passar um preço com ponto como separador de decimais.");
+                return;
+            }
+            catch (IndexOutOfRangeException)
+            {
+                Console.WriteLine("Número de argumentos passados incorreto.");
+                return;
+            }
+
+            await ScheduleJob(context, configuration);
+        }
+
+        private static IConfigurationRoot GetConfiguration()
+        {
             var builder = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json");
 
             var configuration = builder.Build();
+            return configuration;
+        }
 
-            string apiKey = configuration["apiKey"];
-            string targetEmail = configuration["targetEmail"];
+        private static AvisosContext MakeContext(string[] args)
+        {
+            var assetName = args[0];
+            var sellPrice = Decimal.Parse(args[1]);
+            var buyPrice = Decimal.Parse(args[2]);
+            var context = new AvisosContext(assetName, buyPrice, sellPrice);
+            return context;
+        }
 
-            CultureInfo.CurrentCulture = new CultureInfo("en-US", false);
+        private static async Task ScheduleJob(AvisosContext context, IConfigurationRoot configuration)
+        {
+            JobDataMap dataMap = new JobDataMap();
+            dataMap.Put("context", context);
+            dataMap.Put("configuration", configuration);
 
-            try
-            {
-                var assetName = args[0];
-                var buyPrice = Decimal.Parse(args[1]);
-                var sellPrice = Decimal.Parse(args[2]);
+            StdSchedulerFactory factory = new StdSchedulerFactory();
+            IScheduler scheduler = await factory.GetScheduler();
 
-                var client = new RestClient($"https://api.hgbrasil.com/");
-                var request = new RestRequest($"finance/stock_price?key={apiKey}&symbol={assetName}", DataFormat.Json);
-                var response = client.Get<AssetResponse>(request);
+            await scheduler.Start();
 
-                var asset = response.Data.Results[assetName];
+            IJobDetail job = JobBuilder.Create<AvisosCompraVendaJob>()
+                .WithIdentity("avisos-job", "avisos-group")
+                .UsingJobData(dataMap)
+                .Build();
 
-                var smtpConfig = configuration.GetSection("smtpConfig").Get<SmtpConfig>();
+            var jobInterval = Int32.Parse(configuration["emailJobIntervalInSeconds"]);
 
-                MailMessage message = new MailMessage(smtpConfig.Sender, targetEmail);
-                message.Subject = "Aconselhamento de Venda";
-                message.Body = $"O ativo {assetName} está com um preço de R${asset.Price}. É aconselhável que você venda esse ativo.";
-                SmtpClient smtpClient = new SmtpClient(smtpConfig.Server, smtpConfig.Port);
-                smtpClient.EnableSsl = true;
-                smtpClient.UseDefaultCredentials = false;
-                smtpClient.Credentials = new System.Net.NetworkCredential(smtpConfig.Username, smtpConfig.Password);
+            ITrigger trigger = TriggerBuilder.Create()
+                .WithIdentity("avisos-trigger", "avisos-group")
+                .StartNow()
+                .WithSimpleSchedule(x => x
+                    .WithIntervalInSeconds(jobInterval)
+                    .RepeatForever())
+                .Build();
 
-                try
-                {
-                    smtpClient.Send(message);
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("Exception caught in CreateTestMessage2(): {0}",
-                        ex.ToString());
-                }
-
-
-            }
-            catch (IndexOutOfRangeException ie)
-            {
-                Console.WriteLine("Número de argumentos passados incorreto.");
-                throw;
-            }
-
+            await scheduler.ScheduleJob(job, trigger);
+            await Task.Delay(TimeSpan.FromDays(1));
+            await scheduler.Shutdown();
         }
     }
 }
